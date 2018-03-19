@@ -5,13 +5,16 @@ CREATE TABLE msdtracks (
   trackid       INT NOT NULL,
   entrackid     VARCHAR(18),
   mxmtrackid    INT,
-  istest          INT,
+  mxmtest          INT,
   entrackttitle VARCHAR(250),
   mxmtracktitle VARCHAR(180),
   enartistname  VARCHAR(100),
   mxmartistname VARCHAR(55),
-  trackyear     INT,
-  masdgenre VARCHAR(20)
+  msdtrackyear     INT,
+  masdgenre VARCHAR(20),
+  msdduplicateid INT,
+  shscoverid INT,
+  shsoriginal INT
 ) AS
   SELECT *
   FROM CSVREAD(:sql:file);

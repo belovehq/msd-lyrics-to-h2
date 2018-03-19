@@ -15,8 +15,8 @@ INSERT INTO msdartists (mxmartistname, trackcount, vocabulary, fromyear, toyear)
     t.mxmartistname           AS mxmartistname,
     COUNT(DISTINCT t.trackid) AS trackcount,
     COUNT(DISTINCT m.wordid)  AS vocabulary,
-    MIN(t.trackyear)          AS fromyear,
-    MAX(t.trackyear)          AS toyear
+    MIN(t.msdtrackyear)          AS fromyear,
+    MAX(t.msdtrackyear)          AS toyear
   FROM msdtracks t
     INNER JOIN matrix M ON M.trackid = t.trackid
   GROUP BY mxmartistname

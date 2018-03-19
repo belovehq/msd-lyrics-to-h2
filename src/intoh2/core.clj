@@ -11,12 +11,15 @@
 
 (def msd-spec
   "the map of source MSD files"
-  {:years   {:name "tracks_per_year.txt"}
-   :stems   {:name "mxm_reverse_mapping.txt"}
-   :matches {:name "mxm_779k_matches.txt"}
-   :genres  {:name "msd-MASD-styleAssignment.cls" :separator "\t"}
-   :train   {:name "mxm_dataset_train.txt"}
-   :test    {:name "mxm_dataset_test.txt"}})
+  {:years        {:name "tracks_per_year.txt"}
+   :stems        {:name "mxm_reverse_mapping.txt"}
+   :matches      {:name "mxm_779k_matches.txt"}
+   :genres       {:name "msd-MASD-styleAssignment.cls" :separator "\t"}
+   :train        {:name "mxm_dataset_train.txt"}
+   :test         {:name "mxm_dataset_test.txt"}
+   :duplicates   {:name "msd_duplicates.txt"}
+   :covers-train {:name "shs_dataset_train.txt"}
+   :covers-test  {:name "shs_dataset_test.txt"}})
 
 
 (def csv-spec
@@ -34,13 +37,36 @@
                   :header ["wordid" "stem"]}
    :tracks       {:name   "mxmtracks.csv"
                   :header ["trackid" "entrackid" "mxmtrackid" "test"]}
+   :duplicates   {:name   "msdduplicates.csv"
+                  :header ["entrackid" "msdduplicateid" "msdoriginal"]}
+   :covers       {:name   "shscovers.csv"
+                  :header ["entrackid" "shscoverid" "shsoriginal"]}
    :final-pairs  {:name   "h2matrix.csv"
                   :header ["trackid" "wordid" "count"]}
    :final-words  {:name   "h2words.csv"
                   :header ["wordid" "stem" "word"]}
    :final-tracks {:name   "h2tracks.csv"
                   :header ["trackid" "entrackid" "mxmtrackid" "test" "entracktitle"
-                           "mxmtracktitle" "enartistname" "mxmartistname" "trackyear" "masdgenre"]}})
+                           "mxmtracktitle" "enartistname" "mxmartistname" "trackyear"
+                           "masdgenre" "msdduplicateid" "shscoverid" "shsoriginal"]}})
+
+
+(def track-spec
+  "spec for the joining of track data"
+  {:in    {:csv :tracks :join-column 1}
+   :out   :final-tracks
+   :joins [{:csv :matches :key :entrackid :columns [:entracktitle :mxmtracktitle :enartistname :mxmartistname]}
+           {:csv :years :key :entrackid :columns [:year]}
+           {:csv :genres :key :entrackid :columns [:masdgenre]}
+           {:csv :duplicates :key :entrackid :columns [:msdduplicateid]}
+           {:csv :covers :key :entrackid :columns [:shscoverid :shsoriginal]}]})
+
+
+(def word-spec
+  "spec for the joining of word data"
+  {:in    {:csv :words :join-column 1}
+   :out   :final-words
+   :joins [{:csv :stems :key :stem :columns [:word]}]})
 
 
 (def db-spec
@@ -110,7 +136,8 @@
 
 
 (defn tabular-to-csv
-  "convert a tabular line (with separator sep) to a CSV line. Insert id at start of line if supplied. Also replace double quotes with simple quotes."
+  "convert a tabular line (with separator sep) to a CSV line. Insert id at start of line if supplied. And replace
+  double quotes with simple quotes."
   [sep line id]
   (if (= (first line) \#) ""
                           (str (if id (str id ","))
@@ -169,25 +196,6 @@
          (.write wtr line))))))
 
 
-
-(defn csv-file-to-map
-  "convert a csv file into a map {key1 {:col1 ... :col2 ...} key2 {:col1 ... :col2 ...} ... }.
-  file: full path of the csv file
-  keycol: in which column to get the keys of the map
-  include-cols: which columns to include in the output (if nil, include all columns)"
-  ([file key-col] (csv-file-to-map file key-col nil))
-  ([file key-col include-cols]
-   (with-open [rdr (reader file)]
-     (let [lines (line-seq rdr)
-           csvheader (map keyword (cs-to-vec (first lines)))
-           add-kv-pair (fn [out line]
-                         (let [m (zipmap csvheader (cs-to-vec line))
-                               k (key-col m)
-                               v (if include-cols (select-keys m include-cols) m)]
-                           (assoc out k v)))]
-       (reduce add-kv-pair {} (rest lines))))))
-
-
 (defn ^:private write-lyricsdataset-to-csv
   "Convert a single musicXmatch lyrics matrix and append it to CSV files.
   in: the musicXmatch lyrics matrix file name, either the training file or the test file
@@ -218,7 +226,6 @@
 (defn write-lyrics-to-csv
   "Convert the two musicXmatch lyrics matrices into aggregated CSV files"
   [] (let [out-tracks (csv-full-path :tracks)
-           out-words (csv-full-path :words)
            out-pairs (csv-full-path :final-pairs)]
        (with-open [tw (writer out-tracks) pw (writer out-pairs)]
          (.write tw (csv-header :tracks))
@@ -227,46 +234,70 @@
            (write-lyricsdataset-to-csv (msd-full-path :test) tw pw seed)))))
 
 
-(defn join-track-files
-  []
-  "Consolidate track data into a single csv file. Sources are:
-  a) the tracks found in the mxm training and test datasets
-  b) the mxm/msd track matching list
-  c) the list of tracks with years
-  d) the list of tracks with genres"
-  (let [outfile (csv-full-path :final-tracks)
-        matches (csv-file-to-map (csv-full-path :matches) :entrackid)
-        years (csv-file-to-map (csv-full-path :years) :entrackid [:year])
-        styles (csv-file-to-map (csv-full-path :genres) :entrackid [:masdgenre])]
-    (with-open [rdr (reader (csv-full-path :tracks)) wtr (writer outfile)]
-      (.write wtr (csv-header :final-tracks))
+(defn convert-clique-file-to-csv
+  "converts a file of MSD duplicates/covers into a csv file
+  in: path of the msd file
+  out: path of the output csv file
+  append: append to the csv file if true"
+  [in out append]
+  (let [do-track (fn [s groupid] (let [v (s/split s #"<SEP>")]
+                                   [(first v)
+                                    groupid
+                                    (if (= (last v) groupid) "1" "")]))]
+    (with-open [rdr (reader (msd-full-path in)) wtr (writer (csv-full-path out) :append append)]
+      (let [do-line (fn [groupid s]
+                      (case (first s)
+                        \# groupid
+                        \% (first (s/split (subs s 1) #"[ |,]"))
+                        (do (.write wtr (vec-to-csv (do-track s groupid)))
+                            groupid)))]
+        (.write wtr (csv-header out))
+        (reduce do-line nil (line-seq rdr))))))
+
+
+(defn convert-clique-files-to-csv
+  "converts a list of MSD duplicates/covers into csv files. Each item is in the format [in out append] where:
+  in: path of the msd file
+  out: path of the output csv file
+  append: append to the csv file if true"
+  [files]
+  (doseq [f files] (apply convert-clique-file-to-csv f)))
+
+
+(defn csv-file-to-map
+  "convert a csv file into a map {key1 [val1 val2 ...] key2 [val1 val2 ...] ... }.
+  file: full path of the csv file
+  keycol: in which column to get the keys of the map
+  include-cols: which columns to include in the output"
+  ([file key-col include-cols]
+   (with-open [rdr (reader file)]
+     (let [lines (line-seq rdr)
+           csvheader (map keyword (cs-to-vec (first lines)))
+           add-kv-pair (fn [out line]
+                         (let [m (zipmap csvheader (cs-to-vec line))
+                               k (key-col m)
+                               v (map #(get m %) include-cols)]
+                           (assoc out k v)))]
+       (reduce add-kv-pair {} (rest lines))))))
+
+
+(defn join-files [{:keys [in out joins]}]
+  "join files based on a joining spec. The joining spec contains:
+  :in : the file that will be the primary term of the join and the index of the column to use for the join.
+  :out: the output file
+  :joins : the list of files to join, with the column to use for the join and the columns to append in the output file"
+  (let [colidx (:join-column in)
+        datasets (map #(csv-file-to-map (csv-full-path (:csv %)) (:key %) (:columns %)) joins)
+        blanks (map #(repeat (count (:columns %)) "") joins)
+        find-join (fn [k dataset blank]
+                    (if-let [data (get dataset k)] data blank))]
+    (with-open [rdr (reader (csv-full-path (:csv in)))
+                wtr (writer (csv-full-path out))]
+      (.write wtr (csv-header out))
       (doseq [line (rest (line-seq rdr))]
-        (let [entrackid (second (cs-to-vec line))
-              mx (get matches entrackid)
-              enartist (get mx :enartistname "")
-              mxmartist (get mx :mxmartistname "")
-              s (vec-to-csv [line
-                             (get mx :entracktitle "")
-                             (get mx :mxmtracktitle "")
-                             enartist
-                             mxmartist
-                             (get-in years [entrackid :year] "")
-                             (get-in styles [entrackid :masdgenre] "")])]
-          (.write wtr s))))))
-
-
-(defn join-word-files
-  ([]
-   "Consolidate word data into a single csv file. Sources are:
-   a) the list of stemmed words found in the mxm training dataset
-   b) the stem/word matching list"
-   (let [outfile (csv-full-path :final-words)
-         stems (csv-file-to-map (csv-full-path :stems) :stem [:word])]
-     (with-open [rdr (reader (csv-full-path :words)) wtr (writer outfile)]
-       (.write wtr (csv-header :final-words))
-       (doseq [line (rest (line-seq rdr))]
-         (let [stem (second (cs-to-vec line))]
-           (.write wtr (vec-to-csv [line (get-in stems [stem :word] "")]))))))))
+        (let [id (nth (cs-to-vec line) colidx)
+              join (map (partial find-join id) datasets blanks)]
+          (.write wtr (vec-to-csv (apply concat [line] join))))))))
 
 
 
@@ -278,8 +309,11 @@
   [] (do
        (convert-msd-files-to-csv [:years :stems :matches :genres])
        (write-lyrics-to-csv)
-       (join-track-files)
-       (join-word-files)))
+       (convert-clique-files-to-csv [[:duplicates :duplicates false]
+                                     [:covers-train :covers false]
+                                     [:covers-test :covers true]])
+       (join-files word-spec)
+       (join-files track-spec)))
 
 
 (defn create-database

@@ -1,4 +1,4 @@
-(defproject msd-to-h2 "0.1.0"
+(defproject msd-to-h2 "0.2.0"
   :description "Converts lyrics files in the Million Song Dataset into an H2 database."
   :url "https://github.com/belovehq/msd-to-h2"
   :license {:name "MIT License"

@@ -36,6 +36,11 @@ a same directory (while you're browsing the websites, check the licensing/citing
   - mxm_reverse_mapping.txt
 - from https://labrosa.ee.columbia.edu/millionsong/pages/getting-dataset:   
   - tracks_per_year.txt
+- from https://labrosa.ee.columbia.edu/millionsong/blog/11-3-15-921810-song-dataset-duplicates
+  - msd_duplicates.txt
+- from https://labrosa.ee.columbia.edu/millionsong/secondhand
+  - shs_dataset_test.txt
+  - shs_dataset_train.txt
 - from http://www.ifs.tuwien.ac.at/mir/msd/download.html#groundtruth: 
   - msd-MASD-styleAssignment.cls
 
