@@ -14,4 +14,4 @@
 - Conversion of MSD files into H2
 - README with usage instructions
 
-[0.1.1]: https://github.com/belovehq/msd-lyrics-to-h2/compare/0.1.0...0.1.1
+[0.2.0]: https://github.com/belovehq/msd-lyrics-to-h2/compare/v0.1.0...v0.2.0
