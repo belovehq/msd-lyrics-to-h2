@@ -17,7 +17,7 @@ CREATE TABLE msdtracks (
   shsoriginal INT
 ) AS
   SELECT *
-  FROM CSVREAD(:sql:file);
+  FROM CSVREAD(:sql:file, NULL, 'charset=UTF-8');
 
 -- :name create-words-table :execute :raw
 CREATE TABLE msdwords (
@@ -26,7 +26,7 @@ CREATE TABLE msdwords (
   word   VARCHAR(15)
 ) AS
   SELECT *
-  FROM CSVREAD(:sql:file);
+  FROM CSVREAD(:sql:file, NULL, 'charset=UTF-8');
 
 -- :name create-matrix-table :execute :raw
 CREATE TABLE matrix (

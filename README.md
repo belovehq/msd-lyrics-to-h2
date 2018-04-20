@@ -46,7 +46,7 @@ a same directory (while you're browsing the websites, check the licensing/citing
 
 Place the jar file into the same directory and run:
 
-    $ java -jar msd-to-h2-0.1.0-standalone.jar
+    $ java -jar msd-to-h2-0.2.1-standalone.jar
 
 Give it a few minutes to create the output files:
 
@@ -93,7 +93,7 @@ For example:
       :csv  "/data/msd/csv/" 
       :db   "~/h2data/msd"}
  
-You can then run `java -jar msd-to-h2-0.1.0-standalone.jar` at the location of the `msd.edn` file.
+You can then run `java -jar msd-to-h2-0.2.1-standalone.jar` at the location of the `msd.edn` file.
 
 If there is no `msd.edn` file (like earlier) then the program defaults to the following parameters:
 
